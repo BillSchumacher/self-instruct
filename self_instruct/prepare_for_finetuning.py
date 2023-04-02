@@ -73,23 +73,21 @@ def encode_instance(instruction, input, output, random_template=True):
         if input.strip() != "":
             prompt_template, completion_template = random.choice(encoding_templates_w_input)
             prompt = prompt_template.format(instruction=instruction.strip(), input=input.strip())
-            completion = completion_template.format(output=output.strip())
         else:
             prompt_template, completion_template = random.choice(encoding_templates_wo_input)
             prompt = prompt_template.format(instruction=instruction.strip())
-            completion = completion_template.format(output=output.strip())
+        completion = completion_template.format(output=output.strip())
     else:
         prompt = instruction.strip() + "\n\n" + input.strip() + "\n\n"
         completion = output.strip() + "<|endoftext|>"
 
-    data = {
+    return {
         "prompt": prompt,
         "completion": completion,
         "instruction": instruction.strip(),
         "input": input.strip(),
         "output": output.strip(),
     }
-    return data
 
 
 def parse_input_output(response_text):
@@ -111,7 +109,7 @@ def filter_duplicate_instances(instances):
     # if the instances have same non-empty input, but different output, we will not use such instances
     same_input_diff_output = False
     for i in range(1, len(instances)):
-        for j in range(0, i):
+        for j in range(i):
             if instances[i][1] == "":
                 continue
             if instances[i][1] == instances[j][1] and instances[i][2] != instances[j][2]:
@@ -164,7 +162,7 @@ def parse_instances_for_generation_task(raw_text, instruction, response_metadata
 
 def parse_instances_for_classification_task(raw_text, instruction, response_metadata):
     instances = []
-    if not "Class label:" in raw_text:
+    if "Class label:" not in raw_text:
         return []
     instance_texts = raw_text.split("Class label:")[1:]
     for instance_text in instance_texts:
@@ -180,7 +178,7 @@ def parse_instances_for_classification_task(raw_text, instruction, response_meta
             class_label = fields[0].strip()
             input_text = ""
         else:
-            raise ValueError("Invalid instance text: {}".format(instance_text))
+            raise ValueError(f"Invalid instance text: {instance_text}")
         instances.append((instruction.strip(), input_text.strip(), class_label.strip()))
 
     # if the generation stops because of length, we remove the last instance
@@ -195,12 +193,11 @@ if __name__ == "__main__":
     args = parse_args()
 
     training_instances = []
-    
+
     generated_tasks = []
     for instance_file in args.instance_files:
         with open(instance_file) as fin:
-            for line in fin:
-                generated_tasks.append(json.loads(line))
+            generated_tasks.extend(json.loads(line) for line in fin)
     print(f"Loaded {len(generated_tasks)} raw generated tasks")
 
     task_clf_types = {}
@@ -221,13 +218,10 @@ if __name__ == "__main__":
         else:
             task_instances = parse_instances_for_generation_task(task["raw_instances"], instruction, task["instance_metadata"])
 
-        # we only allow max 5 instances per task
-        task_instances = random.sample(task_instances, min(len(task_instances), 5))
-        
-        if not task_instances:
-            continue
-
-        training_instances += task_instances
+        if task_instances := random.sample(
+            task_instances, min(len(task_instances), 5)
+        ):
+            training_instances += task_instances
 
 
     os.makedirs(args.output_dir, exist_ok=True)
@@ -239,7 +233,7 @@ if __name__ == "__main__":
                 "output": instance[2],
             }) + "\n")
     print(f"Saved {len(training_instances)} instances")
-    unique_instructions = set([it[0] for it in training_instances])
+    unique_instructions = {it[0] for it in training_instances}
     print(f"Unique instructions: {len(unique_instructions)}")
     clf_instructions = [instruction for instruction in unique_instructions if task_clf_types[instruction]]
     print(f"Classification instructions: {len(clf_instructions)}")
@@ -281,7 +275,7 @@ if __name__ == "__main__":
                 inst_input = inst_input.strip()
             # we also replace two consecutive new lines with one new line half of the time
             inst_input = inst_input.replace("\n\n", "\n")
-        
+
         gpt3_instances.append(encode_instance(instance[0], inst_input, instance[2]))
 
     # remove duplicates
