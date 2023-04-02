@@ -100,7 +100,7 @@ if __name__ == '__main__':
 
     if args.classification_tasks_only:
         tasks = [task for task in tasks if task_clf_types[task["instruction"]]]
-    
+
     if args.generation_tasks_only:
         tasks = [task for task in tasks if not task_clf_types[task["instruction"]]]
 
@@ -134,10 +134,9 @@ if __name__ == '__main__':
                 for task in batch:
                     if task_clf_types[task["instruction"]]:
                         prompt = output_first_template_for_clf + " " + task["instruction"].strip() + "\n"
-                        prompts.append(prompt)
                     else:
                         prompt = input_first_template_for_gen + " " + task["instruction"].strip() + "\n"
-                        prompts.append(prompt)
+                    prompts.append(prompt)
                 results = make_gpt3_requests(
                     engine=args.engine,
                     prompts=prompts,
